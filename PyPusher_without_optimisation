@@ -1,0 +1,79 @@
+import subprocess
+import os
+import sys
+
+def run_command(command, cwd):
+    """Exécute une commande dans le répertoire spécifié."""
+    try:
+        result = subprocess.run(command, cwd=cwd, capture_output=True, text=True)
+        if result.returncode != 0:
+            # print(f"Erreur lors de l'exécution de la commande: {' '.join(command)}")
+            print(result.stderr)
+            sys.exit(1)
+        else:
+            print(result.stdout)
+    except subprocess.CalledProcessError as e:
+        print(f"Erreur lors de l'exécution de git: {e}")
+        sys.exit(1)
+
+def check_output(command, cwd):
+    """Vérifie la sortie d'une commande."""
+    try:
+        return subprocess.check_output(command, cwd=cwd, stderr=subprocess.STDOUT, text=True)
+    except subprocess.CalledProcessError:
+        return None
+
+def init_git_repo(project_dir, repo_url):
+    """Initialise le dépôt Git et configure le dépôt distant."""
+    if os.path.exists(os.path.join(project_dir, ".git")):
+        print("Le répertoire contient déjà un dépôt Git.")
+        return
+    run_command(['git', 'init'], project_dir)
+    run_command(['git', 'add', '.'], project_dir)
+
+    # Vérifie s'il y a des fichiers à commit
+    status_output = check_output(['git', 'status', '--porcelain'], project_dir)
+    if not status_output.strip():
+        print("Aucun fichier à ajouter et à committer.")
+        return
+    
+    run_command(['git', 'commit', '-m', 'Initial_commit'], project_dir)
+    
+    if check_output(['git', 'remote', 'show', 'origin'], project_dir) is None:
+        print("Le dépôt distant n'existe pas. Ajout du dépôt distant...")
+        run_command(['git', 'remote', 'add', 'origin', repo_url], project_dir)
+
+    # Vérifie si la branche master existe localement avant de la renommer
+    branches = check_output(['git', 'branch'], project_dir)
+    if 'master' in branches:
+        run_command(['git', 'branch', '-m', 'master', 'main'], project_dir)
+    else:
+        print("La branche 'master' n'existe pas localement. Ignorer le renommage de la branche.")
+    
+    # Vérifie si la branche master existe sur le dépôt distant avant de la supprimer
+    remote_branches = check_output(['git', 'ls-remote', '--heads', 'origin'], project_dir)
+    if 'refs/heads/master' in remote_branches:
+        run_command(['git', 'push', 'origin', '--delete', 'master'], project_dir)
+    else:
+        print("La branche 'master' n'existe pas sur le dépôt distant. Ignorer la suppression de la branche distante.")
+
+    run_command(['git', 'pull', 'origin', 'main', '--rebase'], project_dir)
+    run_command(['git', 'push', '-u', 'origin', 'main'], project_dir)
+
+def main():
+    # Demander à l'utilisateur de définir les variables
+    project_dir = input("Enter directory path: ")
+    repo_url = input("Enter Github repository URL: ")
+
+    # Vérifier si le répertoire existe
+    if not os.path.exists(project_dir):
+        print(f"Le répertoire spécifié n'existe pas: {project_dir}")
+        return
+
+    os.chdir(project_dir)
+    
+    init_git_repo(project_dir, repo_url)
+
+if __name__ == "__main__":
+    main()
+
